@@ -1,0 +1,27 @@
+[package]
+name = "medical-record-registry"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.91.0"
+license = "Apache-2.0"
+description = "A Soroban registry for tamper-evident medical-record metadata."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = "25.3.1"
+
+[dev-dependencies]
+soroban-sdk = { version = "25.3.1", features = ["testutils"] }
+
+[profile.release]
+opt-level = "z"
+debug = false
+strip = "symbols"
+debug-assertions = false
+overflow-checks = true
+lto = true
+codegen-units = 1
+panic = "abort"
