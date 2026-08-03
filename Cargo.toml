@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "consent-access-manager",
+    "device-data-attestation",
     "zk-credential-verifier",
 ]
 
