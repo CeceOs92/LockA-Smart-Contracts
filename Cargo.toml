@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "consent-access-manager",
     "zk-credential-verifier",
 ]
 
