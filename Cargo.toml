@@ -5,6 +5,7 @@ members = [
     "device-data-attestation",
     "medical-record-registry",
     "patient-passport-registry",
+    "provider-registry",
     "zk-credential-verifier",
 ]
 
