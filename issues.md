@@ -19,11 +19,11 @@ Set up the initial Rust/Soroban crate for the Consent & Access Manager contract 
 - [ ] Add `Cargo.toml` for the `consent-access-manager` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`ConsentAccessManager`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` (or `src/tests.rs`) module wired up and empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `consent-access-manager/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `consent-access-manager/`
 - [ ] Add crate to the workspace root `Cargo.toml` (create the workspace file if it does not exist yet)
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `consent-access-manager/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `consent-access-manager/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -362,7 +362,7 @@ Add targeted tests for edge cases that the main lifecycle tests don't cover: mul
 Update `consent-access-manager/README.md` with concrete build/test instructions and rustdoc coverage for the public contract API, now that the contract is implemented.
 
 ### Tasks
-- [ ] Add a "Build & Test" section to `consent-access-manager/README.md` with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands
+- [ ] Add a "Build & Test" section to `consent-access-manager/README.md` with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands
 - [ ] Document the final public function signatures (`request_access`, `approve_access`, `reject_access`, `revoke_access`, `check_access`, `get_active_permissions`) matching what was actually implemented, replacing the current illustrative-only list
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or in a linked `events.rs` doc comment block
@@ -385,7 +385,7 @@ Add a CI workflow so every PR touching `consent-access-manager/` is automaticall
 
 ### Tasks
 - [ ] Add (or extend an existing) GitHub Actions workflow that runs on PRs touching `consent-access-manager/**`
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Cache Cargo registry/build artifacts to keep CI runs fast
 - [ ] Verify the workflow passes on a test PR before merging
 
@@ -413,11 +413,11 @@ Set up the initial Rust/Soroban crate for the Device & Data Attestation contract
 - [ ] Add `Cargo.toml` for the `device-data-attestation` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`DeviceDataAttestation`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` module wired up with an empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `device-data-attestation/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `device-data-attestation/`
 - [ ] Add the crate to the workspace root `Cargo.toml`
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `device-data-attestation/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `device-data-attestation/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -752,7 +752,7 @@ Update `device-data-attestation/README.md` (currently just a title) with a full 
 
 ### Tasks
 - [ ] Describe the contract's purpose: registering approved medical devices/IoT sources and anchoring verifiable, signed readings on-chain, per the platform's IoT data flow design
-- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands
+- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands
 - [ ] Document the final public function signatures (`register_device`, `revoke_device`, `reactivate_device`, `submit_attestation`, `get_device`, `is_device_active`, `get_attestations_for_patient`, `get_attestations_for_device`) matching what was actually implemented
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or a linked `events.rs` doc comment block
@@ -775,7 +775,7 @@ Add a CI workflow so every PR touching `device-data-attestation/` is automatical
 
 ### Tasks
 - [ ] Add (or extend the existing) GitHub Actions workflow to also run on PRs touching `device-data-attestation/**`
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Reuse Cargo registry/build artifact caching already configured for the workspace
 - [ ] Verify the workflow passes on a test PR before merging
 
@@ -803,11 +803,11 @@ Set up the initial Rust/Soroban crate for the Medical Record Registry contract i
 - [ ] Add `Cargo.toml` for the `medical-record-registry` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`MedicalRecordRegistry`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` module wired up with an empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `medical-record-registry/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `medical-record-registry/`
 - [ ] Add the crate to the workspace root `Cargo.toml`
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `medical-record-registry/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `medical-record-registry/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -1141,7 +1141,7 @@ Update `medical-record-registry/README.md` with concrete build/test instructions
 
 ### Tasks
 - [ ] Fix the "Example record types" bullet list formatting (`DIAGNOSIS`, `VACCINATION`)
-- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands
+- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands
 - [ ] Document the final public function signatures (`add_record`, `update_record_status`, `verify_record_hash`, `get_record_metadata`, `get_patient_records`, `get_provider_records`) matching what was actually implemented, replacing the current illustrative-only list
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or a linked `events.rs` doc comment block, and document the `RecordStatus` transition rules
@@ -1164,7 +1164,7 @@ Add a CI workflow so every PR touching `medical-record-registry/` is automatical
 
 ### Tasks
 - [ ] Add (or extend the existing) GitHub Actions workflow to also run on PRs touching `medical-record-registry/**`
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Reuse Cargo registry/build artifact caching already configured for the workspace
 - [ ] Verify the workflow passes on a test PR before merging
 
@@ -1192,11 +1192,11 @@ Set up the initial Rust/Soroban crate for the Patient Passport Registry contract
 - [ ] Add `Cargo.toml` for the `patient-passport-registry` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`PatientPassportRegistry`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` module wired up with an empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `patient-passport-registry/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `patient-passport-registry/`
 - [ ] Add the crate to the workspace root `Cargo.toml`
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `patient-passport-registry/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `patient-passport-registry/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -1595,7 +1595,7 @@ Add an end-to-end integration test that exercises the full lifecycle through the
 Update `patient-passport-registry/README.md` with concrete build/test instructions and rustdoc coverage for the public contract API, now that the contract is implemented.
 
 ### Tasks
-- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands
+- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands
 - [ ] Document the final public function signatures (`register_patient`, `update_patient_key`, `update_recovery_address`, `deactivate_passport`, `reactivate_passport`, `get_passport`, `get_passport_by_wallet`) matching what was actually implemented, replacing the current illustrative-only list
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or a linked `events.rs` doc comment block, and document the `PassportStatus` transition rules and the recovery-address trust model
@@ -1618,7 +1618,7 @@ Add a CI workflow so every PR touching `patient-passport-registry/` is automatic
 
 ### Tasks
 - [ ] Add (or extend the existing) GitHub Actions workflow to also run on PRs touching `patient-passport-registry/**`
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Reuse Cargo registry/build artifact caching already configured for the workspace
 - [ ] Verify the workflow passes on a test PR before merging
 
@@ -1646,11 +1646,11 @@ Set up the initial Rust/Soroban crate for the Provider Registry contract inside 
 - [ ] Add `Cargo.toml` for the `provider-registry` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`ProviderRegistry`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` module wired up with an empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `provider-registry/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `provider-registry/`
 - [ ] Add the crate to the workspace root `Cargo.toml`
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `provider-registry/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `provider-registry/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -2109,7 +2109,7 @@ Add an end-to-end integration test that exercises the full lifecycle through the
 Update `provider-registry/README.md` with concrete build/test instructions and rustdoc coverage for the public contract API, now that the contract is implemented.
 
 ### Tasks
-- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands
+- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands
 - [ ] Document the final public function signatures (`initialize`, `transfer_admin`, `register_provider`, `verify_provider`, `reinstate_provider`, `suspend_provider`, `revoke_provider`, `get_provider`, `get_provider_by_wallet`, `is_provider_verified`) matching what was actually implemented, replacing the current illustrative-only list
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or a linked `events.rs` doc comment block, and document the `ProviderStatus` transition rules and the admin trust model
@@ -2132,7 +2132,7 @@ Add a CI workflow so every PR touching `provider-registry/` is automatically bui
 
 ### Tasks
 - [ ] Add (or extend the existing) GitHub Actions workflow to also run on PRs touching `provider-registry/**`
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Reuse Cargo registry/build artifact caching already configured for the workspace
 - [ ] Verify the workflow passes on a test PR before merging
 
@@ -2160,11 +2160,11 @@ Set up the initial Rust/Soroban crate for the ZK Credential Verifier contract in
 - [ ] Add `Cargo.toml` for the `zk-credential-verifier` crate (crate-type `cdylib` + `lib`, `soroban-sdk` dependency, `dev-dependencies` for testutils)
 - [ ] Add `src/lib.rs` with an empty `#[contract]` struct (`ZkCredentialVerifier`) and `#[contractimpl]` block
 - [ ] Add `src/test.rs` module wired up with an empty/placeholder test that compiles
-- [ ] Ensure `cargo build --target wasm32-unknown-unknown --release` succeeds from inside `zk-credential-verifier/`
+- [ ] Ensure `cargo build --target wasm32v1-none --release` succeeds from inside `zk-credential-verifier/`
 - [ ] Add the crate to the workspace root `Cargo.toml`
 
 ### Acceptance Criteria
-- `cargo test` and `cargo build --target wasm32-unknown-unknown --release` both succeed inside `zk-credential-verifier/`.
+- `cargo test` and `cargo build --target wasm32v1-none --release` both succeed inside `zk-credential-verifier/`.
 - No contract logic is implemented yet — this issue only creates the buildable skeleton other issues will build on.
 
 ### Location
@@ -2821,7 +2821,7 @@ Update `zk-credential-verifier/README.md` with concrete build/test instructions 
 
 ### Tasks
 - [ ] Add a short "How verification works" section explaining the on-chain Groth16-over-BN254 pairing check (`bn254_multi_pairing_check`), referencing CAP-0074, and the Poseidon2-based nullifier scheme, referencing CAP-0075
-- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32-unknown-unknown --release` and `cargo test` commands, plus the minimum `soroban-sdk`/toolchain version confirmed by the research-spike issue
+- [ ] Add a "Build & Test" section with the exact `cargo build --target wasm32v1-none --release` and `cargo test` commands, plus the minimum `soroban-sdk`/toolchain version confirmed by the research-spike issue
 - [ ] Document the final public function signatures (`initialize`, `transfer_admin`, `register_verifying_key`, `get_verifying_key`, `submit_proof`, `verify_proof_attestation`, `store_verified_claim`, `revoke_claim`, `get_verified_claim`, `get_active_claims_for_patient`, `is_claim_valid`) matching what was actually implemented, replacing the current illustrative-only list
 - [ ] Add rustdoc comments (`///`) to every `#[contractimpl]` function explaining parameters, return values, and error conditions
 - [ ] Document the emitted event schemas (topics + data) in the README or a linked `events.rs` doc comment block
@@ -2845,7 +2845,7 @@ Add a CI workflow so every PR touching `zk-credential-verifier/` is automaticall
 ### Tasks
 - [ ] Add (or extend the existing) GitHub Actions workflow to also run on PRs touching `zk-credential-verifier/**`
 - [ ] Pin the Rust toolchain and `soroban-sdk`/`stellar-cli` versions to the ones confirmed by the research-spike issue as supporting Protocol 25 host functions
-- [ ] Steps: install Rust toolchain + `wasm32-unknown-unknown` target, `cargo build --target wasm32-unknown-unknown --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [ ] Steps: install Rust toolchain + `wasm32v1-none` target, `cargo build --target wasm32v1-none --release`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] Reuse Cargo registry/build artifact caching already configured for the workspace
 - [ ] Verify the workflow passes on a test PR before merging
 
