@@ -2,15 +2,11 @@
 
 use soroban_sdk::{contract, contractimpl};
 
-mod types;
-
-pub use types::RecordScope;
-
 #[contract]
-pub struct ConsentAccessManager;
+pub struct ZkCredentialVerifier;
 
 #[contractimpl]
-impl ConsentAccessManager {}
+impl ZkCredentialVerifier {}
 
 #[cfg(test)]
 mod test;

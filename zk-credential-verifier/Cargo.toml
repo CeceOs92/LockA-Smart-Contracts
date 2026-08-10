@@ -1,5 +1,5 @@
 [package]
-name = "consent-access-manager"
+name = "zk-credential-verifier"
 version = "0.1.0"
 edition = "2021"
 publish = false

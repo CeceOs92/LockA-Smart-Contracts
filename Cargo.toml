@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "consent-access-manager",
+    "device-data-attestation",
+    "medical-record-registry",
+    "patient-passport-registry",
+    "provider-registry",
+    "zk-credential-verifier",
+]
+
+[workspace.dependencies]
+soroban-sdk = "27.0.4"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = "symbols"
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true
