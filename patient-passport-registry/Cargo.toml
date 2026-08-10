@@ -1,5 +1,5 @@
 [package]
-name = "consent-access-manager"
+name = "patient-passport-registry"
 version = "0.1.0"
 edition = "2021"
 publish = false

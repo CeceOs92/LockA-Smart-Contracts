@@ -40,6 +40,7 @@ pub struct RecordMetadata {
 enum DataKey {
     Record(BytesN<32>),
     PatientRecords(BytesN<32>),
+    ProviderRecords(Address),
 }
 
 #[contracterror]
@@ -81,7 +82,7 @@ impl MedicalRecordRegistry {
         let record = RecordMetadata {
             record_id: record_id.clone(),
             passport_id: passport_id.clone(),
-            provider_id,
+            provider_id: provider_id.clone(),
             record_type,
             encrypted_file_hash,
             storage_pointer_hash,
@@ -95,9 +96,17 @@ impl MedicalRecordRegistry {
         let mut records = storage
             .get::<DataKey, Vec<BytesN<32>>>(&patient_key)
             .unwrap_or(Vec::new(&env));
-        records.push_back(record_id);
+        records.push_back(record_id.clone());
         storage.set(&patient_key, &records);
         bump_ttl(&env, &patient_key);
+
+        let provider_key = DataKey::ProviderRecords(provider_id);
+        let mut records = storage
+            .get::<DataKey, Vec<BytesN<32>>>(&provider_key)
+            .unwrap_or(Vec::new(&env));
+        records.push_back(record_id);
+        storage.set(&provider_key, &records);
+        bump_ttl(&env, &provider_key);
 
         Ok(())
     }
@@ -168,6 +177,31 @@ impl MedicalRecordRegistry {
         }
         records
     }
+
+    /// Returns the full metadata set for records issued by a provider.
+    ///
+    /// This is a read-only audit view. It does not require provider auth
+    /// because it returns only on-chain record metadata, not medical contents.
+    pub fn get_provider_records(env: Env, provider_id: Address) -> Vec<RecordMetadata> {
+        let provider_key = DataKey::ProviderRecords(provider_id);
+        let storage = env.storage().persistent();
+        let record_ids = storage
+            .get::<DataKey, Vec<BytesN<32>>>(&provider_key)
+            .unwrap_or(Vec::new(&env));
+        if !record_ids.is_empty() {
+            bump_ttl(&env, &provider_key);
+        }
+
+        let mut records = Vec::new(&env);
+        for record_id in record_ids {
+            let record_key = DataKey::Record(record_id);
+            if let Some(record) = storage.get::<DataKey, RecordMetadata>(&record_key) {
+                bump_ttl(&env, &record_key);
+                records.push_back(record);
+            }
+        }
+        records
+    }
 }
 
 // Medical records must outlive normal temporary-storage windows. The network
@@ -189,6 +223,26 @@ mod test {
 
     fn hash(env: &Env, value: u8) -> BytesN<32> {
         BytesN::from_array(env, &[value; 32])
+    }
+
+    fn add_record(
+        client: &MedicalRecordRegistryClient,
+        env: &Env,
+        record_id_value: u8,
+        passport_id_value: u8,
+        provider_id: &Address,
+        record_type: Symbol,
+    ) -> BytesN<32> {
+        let record_id = hash(env, record_id_value);
+        client.add_record(
+            &record_id,
+            &hash(env, passport_id_value),
+            provider_id,
+            &record_type,
+            &hash(env, record_id_value + 10),
+            &hash(env, record_id_value + 20),
+        );
+        record_id
     }
 
     #[test]
@@ -225,5 +279,49 @@ mod test {
             client.get_record_metadata(&record_id).unwrap().status,
             RecordStatus::Archived
         );
+    }
+
+    #[test]
+    fn returns_empty_provider_records_for_provider_without_issued_records() {
+        let env = Env::default();
+
+        let contract_id = env.register(MedicalRecordRegistry, ());
+        let client = MedicalRecordRegistryClient::new(&env, &contract_id);
+
+        let provider_id = Address::generate(&env);
+
+        assert!(client.get_provider_records(&provider_id).is_empty());
+    }
+
+    #[test]
+    fn returns_provider_records_across_patients_and_record_types() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(MedicalRecordRegistry, ());
+        let client = MedicalRecordRegistryClient::new(&env, &contract_id);
+
+        let provider_id = Address::generate(&env);
+        let other_provider_id = Address::generate(&env);
+        let lab_record_id = add_record(&client, &env, 11, 1, &provider_id, symbol_short!("LAB"));
+        let rx_record_id = add_record(&client, &env, 12, 2, &provider_id, symbol_short!("RX"));
+        add_record(
+            &client,
+            &env,
+            13,
+            3,
+            &other_provider_id,
+            symbol_short!("IMG"),
+        );
+
+        let records = client.get_provider_records(&provider_id);
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(records.get(0).unwrap().record_id, lab_record_id);
+        assert_eq!(records.get(0).unwrap().passport_id, hash(&env, 1));
+        assert_eq!(records.get(0).unwrap().record_type, symbol_short!("LAB"));
+        assert_eq!(records.get(1).unwrap().record_id, rx_record_id);
+        assert_eq!(records.get(1).unwrap().passport_id, hash(&env, 2));
+        assert_eq!(records.get(1).unwrap().record_type, symbol_short!("RX"));
     }
 }

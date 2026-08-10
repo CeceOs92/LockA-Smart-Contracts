@@ -4,13 +4,13 @@ use soroban_sdk::{contract, contractimpl};
 
 mod types;
 
-pub use types::RecordScope;
+pub use types::{is_valid_transition, ProviderStatus, ProviderType};
 
 #[contract]
-pub struct ConsentAccessManager;
+pub struct ProviderRegistry;
 
 #[contractimpl]
-impl ConsentAccessManager {}
+impl ProviderRegistry {}
 
 #[cfg(test)]
 mod test;
