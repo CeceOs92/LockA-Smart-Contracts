@@ -2,6 +2,10 @@
 
 use soroban_sdk::{contract, contractimpl};
 
+mod types;
+
+pub use types::CredentialType;
+
 #[contract]
 pub struct ZkCredentialVerifier;
 
