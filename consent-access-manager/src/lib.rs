@@ -6,6 +6,10 @@
 
 use soroban_sdk::{contract, contracttype};
 
+mod storage;
+
+pub use storage::AccessRequest;
+
 /// The granular record categories a patient can grant a provider access to.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
