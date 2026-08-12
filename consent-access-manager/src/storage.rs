@@ -1,11 +1,6 @@
 //! Persistence for [`AccessRequest`] values: the storage key scheme and the
 //! helper functions used to read and write them.
 
-// The public contract API (request/approve/reject/revoke) that will call
-// these helpers lands in a later issue; until then they're only exercised by
-// this module's tests.
-#![allow(dead_code)]
-
 use soroban_sdk::{contracttype, Address, Env, Vec};
 
 use crate::RecordScope;
@@ -18,7 +13,13 @@ pub struct AccessRequest {
     pub passport_id: Address,
     pub provider_id: Address,
     pub record_scope: RecordScope,
+    /// The access window the provider asked for, in seconds. Recorded at
+    /// request time so approval can derive `expires_at` from the duration the
+    /// patient actually saw when consenting.
+    pub duration_seconds: u64,
     pub approved: bool,
+    /// Ledger timestamp at which the grant lapses. `0` until approval, since
+    /// an unapproved request has no access window yet.
     pub expires_at: u64,
     pub revoked: bool,
     pub created_at: u64,
@@ -70,7 +71,7 @@ pub(crate) fn write_access_request(env: &Env, request: &AccessRequest) {
     let mut index = storage
         .get::<DataKey, Vec<u64>>(&index_key)
         .unwrap_or(Vec::new(env));
-    if !index.contains(&request.access_id) {
+    if !index.contains(request.access_id) {
         index.push_back(request.access_id);
     }
     storage.set(&index_key, &index);
@@ -78,6 +79,9 @@ pub(crate) fn write_access_request(env: &Env, request: &AccessRequest) {
 }
 
 /// Returns the access request stored under `access_id`, if any.
+// The approve/reject/revoke entry points that read requests back land in later
+// issues; until then this is only exercised by tests.
+#[allow(dead_code)]
 pub(crate) fn read_access_request(env: &Env, access_id: u64) -> Option<AccessRequest> {
     let request_key = DataKey::AccessRequest(access_id);
     let storage = env.storage().persistent();
@@ -101,6 +105,7 @@ mod test {
             passport_id: Address::generate(env),
             provider_id: Address::generate(env),
             record_scope: RecordScope::LabResultsOnly,
+            duration_seconds: 3_600,
             approved: false,
             expires_at: 0,
             revoked: false,
