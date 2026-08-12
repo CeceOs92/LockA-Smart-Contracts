@@ -11,4 +11,8 @@ crate-type = ["cdylib", "lib"]
 soroban-sdk = { workspace = true }
 
 [dev-dependencies]
-soroban-sdk = { workspace = true, features = ["testutils"] }
+# `hazmat-crypto` exposes `Env::crypto_hazmat()`, the only path to the Poseidon
+# permutations. Kept to dev-dependencies while this is a spike; it must move to
+# `[dependencies]` once contract code (not just tests) calls Poseidon.
+# See docs/bn254-host-functions.md.
+soroban-sdk = { workspace = true, features = ["testutils", "hazmat-crypto"] }
