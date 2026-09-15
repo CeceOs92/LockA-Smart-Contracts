@@ -51,10 +51,22 @@ mod tests {
 
     #[test]
     fn valid_transitions_are_accepted() {
-        assert!(is_valid_transition(&PassportStatus::Active, &PassportStatus::Suspended));
-        assert!(is_valid_transition(&PassportStatus::Suspended, &PassportStatus::Active));
-        assert!(is_valid_transition(&PassportStatus::Active, &PassportStatus::Revoked));
-        assert!(is_valid_transition(&PassportStatus::Suspended, &PassportStatus::Revoked));
+        assert!(is_valid_transition(
+            &PassportStatus::Active,
+            &PassportStatus::Suspended
+        ));
+        assert!(is_valid_transition(
+            &PassportStatus::Suspended,
+            &PassportStatus::Active
+        ));
+        assert!(is_valid_transition(
+            &PassportStatus::Active,
+            &PassportStatus::Revoked
+        ));
+        assert!(is_valid_transition(
+            &PassportStatus::Suspended,
+            &PassportStatus::Revoked
+        ));
     }
 
     #[test]

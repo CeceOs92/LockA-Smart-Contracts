@@ -64,7 +64,9 @@ mod tests {
 
         env.as_contract(&contract_id, || {
             let key = symbol_short!("ptype");
-            env.storage().persistent().set(&key, &ProviderType::Laboratory);
+            env.storage()
+                .persistent()
+                .set(&key, &ProviderType::Laboratory);
 
             let loaded: ProviderType = env.storage().persistent().get(&key).unwrap();
             assert_eq!(loaded, ProviderType::Laboratory);
@@ -73,12 +75,30 @@ mod tests {
 
     #[test]
     fn valid_transitions_are_accepted() {
-        assert!(is_valid_transition(&ProviderStatus::Pending, &ProviderStatus::Verified));
-        assert!(is_valid_transition(&ProviderStatus::Pending, &ProviderStatus::Revoked));
-        assert!(is_valid_transition(&ProviderStatus::Verified, &ProviderStatus::Suspended));
-        assert!(is_valid_transition(&ProviderStatus::Verified, &ProviderStatus::Revoked));
-        assert!(is_valid_transition(&ProviderStatus::Suspended, &ProviderStatus::Verified));
-        assert!(is_valid_transition(&ProviderStatus::Suspended, &ProviderStatus::Revoked));
+        assert!(is_valid_transition(
+            &ProviderStatus::Pending,
+            &ProviderStatus::Verified
+        ));
+        assert!(is_valid_transition(
+            &ProviderStatus::Pending,
+            &ProviderStatus::Revoked
+        ));
+        assert!(is_valid_transition(
+            &ProviderStatus::Verified,
+            &ProviderStatus::Suspended
+        ));
+        assert!(is_valid_transition(
+            &ProviderStatus::Verified,
+            &ProviderStatus::Revoked
+        ));
+        assert!(is_valid_transition(
+            &ProviderStatus::Suspended,
+            &ProviderStatus::Verified
+        ));
+        assert!(is_valid_transition(
+            &ProviderStatus::Suspended,
+            &ProviderStatus::Revoked
+        ));
     }
 
     #[test]
@@ -115,6 +135,9 @@ mod tests {
             }
         }
 
-        assert_eq!(checked, 16, "expected all 16 (from, to) combinations to be checked");
+        assert_eq!(
+            checked, 16,
+            "expected all 16 (from, to) combinations to be checked"
+        );
     }
 }

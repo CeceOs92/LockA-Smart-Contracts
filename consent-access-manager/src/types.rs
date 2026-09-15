@@ -42,7 +42,13 @@ mod tests {
     #[test]
     fn record_scope_variants_are_distinct() {
         assert_ne!(RecordScope::AllRecords, RecordScope::LabResultsOnly);
-        assert_ne!(RecordScope::PrescriptionsOnly, RecordScope::VaccinationRecordsOnly);
-        assert_ne!(RecordScope::EmergencySummaryOnly, RecordScope::InsuranceDataOnly);
+        assert_ne!(
+            RecordScope::PrescriptionsOnly,
+            RecordScope::VaccinationRecordsOnly
+        );
+        assert_ne!(
+            RecordScope::EmergencySummaryOnly,
+            RecordScope::InsuranceDataOnly
+        );
     }
 }

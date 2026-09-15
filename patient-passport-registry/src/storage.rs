@@ -1,3 +1,7 @@
+// Not yet called from the contract's public methods; exercised via the tests below
+// until PatientPassportRegistry's read/write flows are wired up.
+#![allow(dead_code)]
+
 use soroban_sdk::{contracttype, Address, Env};
 
 use crate::types::Passport;
@@ -16,7 +20,9 @@ pub enum DataKey {
 
 /// Reads a registered passport by its `passport_id`, if it exists.
 pub fn read_passport(env: &Env, passport_id: u64) -> Option<Passport> {
-    env.storage().persistent().get(&DataKey::Passport(passport_id))
+    env.storage()
+        .persistent()
+        .get(&DataKey::Passport(passport_id))
 }
 
 /// Persists (or overwrites) a passport record under its `passport_id`.
@@ -34,7 +40,9 @@ pub fn next_passport_id(env: &Env) -> u64 {
         .get::<_, u64>(&DataKey::NextPassportId)
         .unwrap_or(0)
         + 1;
-    env.storage().instance().set(&DataKey::NextPassportId, &next);
+    env.storage()
+        .instance()
+        .set(&DataKey::NextPassportId, &next);
     next
 }
 
