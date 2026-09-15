@@ -1,3 +1,7 @@
+// Not yet called from the contract's public methods; exercised via the tests below
+// until DeviceDataAttestation's read/write flows are wired up.
+#![allow(dead_code)]
+
 use soroban_sdk::{contracttype, Address, BytesN, Env};
 
 use crate::types::Device;
@@ -28,7 +32,9 @@ pub fn write_device(env: &Env, device: &Device) {
 
 /// Returns whether a device with the given `device_id` is already registered.
 pub fn device_exists(env: &Env, device_id: &BytesN<32>) -> bool {
-    env.storage().persistent().has(&DataKey::Device(device_id.clone()))
+    env.storage()
+        .persistent()
+        .has(&DataKey::Device(device_id.clone()))
 }
 
 #[cfg(test)]
