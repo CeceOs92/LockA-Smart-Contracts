@@ -1,10 +1,14 @@
 use soroban_sdk::testutils::{
-    Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger, MockAuth, MockAuthInvoke,
+    Address as _, AuthorizedFunction, AuthorizedInvocation, Events as _, Ledger, MockAuth,
+    MockAuthInvoke,
 };
-use soroban_sdk::{Address, Env, IntoVal, InvokeError, Symbol, Vec};
+use soroban_sdk::{Address, Env, Event as _, IntoVal, InvokeError, Symbol, Vec};
 
 use crate::storage::{read_access_request, DataKey};
-use crate::{ConsentAccessManager, ConsentAccessManagerClient, Error, RecordScope};
+use crate::{
+    AccessApproved, AccessRejected, AccessRequested, ConsentAccessManager,
+    ConsentAccessManagerClient, Error, RecordScope,
+};
 
 const ONE_DAY: u64 = 86_400;
 const REQUESTED_AT: u64 = 1_700_000_000;
@@ -41,6 +45,22 @@ impl Fixture {
         self.env.as_contract(&self.contract_id, || {
             read_access_request(&self.env, access_id)
         })
+    }
+
+    fn create_and_approve_request(
+        &self,
+        provider_id: &Address,
+        record_scope: RecordScope,
+        duration_seconds: u64,
+    ) -> u64 {
+        let access_id = self.client().request_access(
+            provider_id,
+            &self.passport_id,
+            &record_scope,
+            &duration_seconds,
+        );
+        self.client().approve_access(&self.passport_id, &access_id);
+        access_id
     }
 
     fn patient_index(&self) -> Vec<u64> {
@@ -224,4 +244,780 @@ fn request_access_keeps_each_patients_index_separate() {
     );
 
     assert_eq!(fixture.patient_index(), soroban_sdk::vec![&fixture.env, 1]);
+}
+
+// --- approve_access ---
+
+#[test]
+fn approve_access_activates_a_pending_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let approved_at = REQUESTED_AT + 500;
+    fixture.env.ledger().set_timestamp(approved_at);
+    fixture
+        .client()
+        .approve_access(&fixture.passport_id, &access_id);
+
+    let request = fixture.stored_request(access_id).unwrap();
+    assert!(request.approved);
+    assert!(!request.revoked);
+    assert!(!request.rejected);
+    assert_eq!(
+        request.expires_at,
+        approved_at + ONE_DAY,
+        "expires_at must be computed from the approval time, not the request time"
+    );
+}
+
+#[test]
+fn approve_access_fails_without_the_passports_authorization() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let impostor = Address::generate(&fixture.env);
+    fixture.env.mock_auths(&[MockAuth {
+        address: &impostor,
+        invoke: &MockAuthInvoke {
+            contract: &fixture.contract_id,
+            fn_name: "approve_access",
+            args: (fixture.passport_id.clone(), access_id).into_val(&fixture.env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let result = fixture
+        .client()
+        .try_approve_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Err(InvokeError::Abort)));
+    assert!(!fixture.stored_request(access_id).unwrap().approved);
+}
+
+#[test]
+fn approve_access_fails_for_an_already_revoked_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &access_id);
+
+    let result = fixture
+        .client()
+        .try_approve_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::AlreadyRevoked)));
+    assert!(!fixture.stored_request(access_id).unwrap().approved);
+}
+
+#[test]
+fn approve_access_fails_for_an_already_rejected_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .reject_access(&fixture.passport_id, &access_id);
+
+    let result = fixture
+        .client()
+        .try_approve_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::AlreadyRejected)));
+}
+
+#[test]
+fn approve_access_fails_for_a_nonexistent_access_id() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let result = fixture
+        .client()
+        .try_approve_access(&fixture.passport_id, &42);
+
+    assert_eq!(result, Err(Ok(Error::RequestNotFound)));
+}
+
+#[test]
+fn approve_access_fails_when_caller_does_not_own_the_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let other_passport_id = Address::generate(&fixture.env);
+    let result = fixture
+        .client()
+        .try_approve_access(&other_passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::NotOwner)));
+    assert!(!fixture.stored_request(access_id).unwrap().approved);
+}
+
+// --- reject_access ---
+
+#[test]
+fn reject_access_marks_a_pending_request_rejected() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .reject_access(&fixture.passport_id, &access_id);
+
+    let request = fixture.stored_request(access_id).unwrap();
+    assert!(request.rejected);
+    assert!(!request.approved);
+    assert!(!request.revoked);
+}
+
+#[test]
+fn reject_access_fails_for_an_already_approved_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    let result = fixture
+        .client()
+        .try_reject_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::AlreadyApproved)));
+    assert!(fixture.stored_request(access_id).unwrap().approved);
+    assert!(!fixture.stored_request(access_id).unwrap().rejected);
+}
+
+#[test]
+fn reject_access_fails_without_the_passports_authorization() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let impostor = Address::generate(&fixture.env);
+    fixture.env.mock_auths(&[MockAuth {
+        address: &impostor,
+        invoke: &MockAuthInvoke {
+            contract: &fixture.contract_id,
+            fn_name: "reject_access",
+            args: (fixture.passport_id.clone(), access_id).into_val(&fixture.env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let result = fixture
+        .client()
+        .try_reject_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Err(InvokeError::Abort)));
+    assert!(!fixture.stored_request(access_id).unwrap().rejected);
+}
+
+#[test]
+fn reject_access_fails_when_caller_does_not_own_the_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let other_passport_id = Address::generate(&fixture.env);
+    let result = fixture
+        .client()
+        .try_reject_access(&other_passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::NotOwner)));
+}
+
+#[test]
+fn reject_access_fails_for_a_nonexistent_access_id() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let result = fixture
+        .client()
+        .try_reject_access(&fixture.passport_id, &42);
+
+    assert_eq!(result, Err(Ok(Error::RequestNotFound)));
+}
+
+#[test]
+fn reject_access_fails_for_an_already_rejected_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .reject_access(&fixture.passport_id, &access_id);
+
+    let result = fixture
+        .client()
+        .try_reject_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::AlreadyRejected)));
+}
+
+// --- revoke_access ---
+
+#[test]
+fn revoke_access_revokes_an_active_grant() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &access_id);
+
+    let request = fixture.stored_request(access_id).unwrap();
+    assert!(request.revoked);
+    assert!(request.approved, "revocation does not clear approved");
+}
+
+#[test]
+fn revoke_access_revokes_a_pending_unapproved_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &access_id);
+
+    assert!(fixture.stored_request(access_id).unwrap().revoked);
+}
+
+#[test]
+fn revoke_access_is_idempotent_for_an_already_revoked_grant() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &access_id);
+
+    let result = fixture
+        .client()
+        .try_revoke_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Ok(Ok(())));
+    assert!(fixture.stored_request(access_id).unwrap().revoked);
+}
+
+#[test]
+fn revoke_access_fails_without_the_passports_authorization() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let impostor = Address::generate(&fixture.env);
+    fixture.env.mock_auths(&[MockAuth {
+        address: &impostor,
+        invoke: &MockAuthInvoke {
+            contract: &fixture.contract_id,
+            fn_name: "revoke_access",
+            args: (fixture.passport_id.clone(), access_id).into_val(&fixture.env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let result = fixture
+        .client()
+        .try_revoke_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Err(InvokeError::Abort)));
+    assert!(!fixture.stored_request(access_id).unwrap().revoked);
+}
+
+#[test]
+fn revoke_access_fails_when_caller_does_not_own_the_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let other_passport_id = Address::generate(&fixture.env);
+    let result = fixture
+        .client()
+        .try_revoke_access(&other_passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::NotOwner)));
+}
+
+#[test]
+fn revoke_access_fails_for_a_nonexistent_access_id() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let result = fixture
+        .client()
+        .try_revoke_access(&fixture.passport_id, &42);
+
+    assert_eq!(result, Err(Ok(Error::RequestNotFound)));
+}
+
+// --- check_access ---
+
+#[test]
+fn check_access_returns_true_for_an_active_matching_grant() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    assert!(fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::LabResultsOnly,
+    ));
+}
+
+#[test]
+fn check_access_returns_false_for_an_expired_grant() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    fixture
+        .env
+        .ledger()
+        .set_timestamp(REQUESTED_AT + ONE_DAY + 1);
+
+    assert!(!fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::LabResultsOnly,
+    ));
+}
+
+#[test]
+fn check_access_returns_false_for_a_revoked_grant() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &access_id);
+
+    assert!(!fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::LabResultsOnly,
+    ));
+}
+
+#[test]
+fn check_access_all_records_grant_satisfies_a_narrower_scope_query() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::AllRecords,
+        ONE_DAY,
+    );
+
+    assert!(fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::PrescriptionsOnly,
+    ));
+}
+
+#[test]
+fn check_access_returns_false_for_a_non_matching_scope() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    assert!(!fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::PrescriptionsOnly,
+    ));
+}
+
+#[test]
+fn check_access_returns_false_when_no_request_exists() {
+    let fixture = Fixture::new();
+
+    assert!(!fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::LabResultsOnly,
+    ));
+}
+
+#[test]
+fn check_access_returns_false_for_an_unapproved_pending_request() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    assert!(!fixture.client().check_access(
+        &fixture.passport_id,
+        &fixture.provider_id,
+        &RecordScope::LabResultsOnly,
+    ));
+}
+
+// --- get_active_permissions ---
+
+#[test]
+fn get_active_permissions_returns_empty_for_a_patient_with_no_grants() {
+    let fixture = Fixture::new();
+
+    assert!(fixture
+        .client()
+        .get_active_permissions(&fixture.passport_id)
+        .is_empty());
+}
+
+#[test]
+fn get_active_permissions_filters_out_expired_revoked_and_unapproved_entries() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    // access_id 1: pending, never approved.
+    fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    // access_id 2: approved, then revoked.
+    let revoked_id = fixture.create_and_approve_request(
+        &Address::generate(&fixture.env),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    fixture
+        .client()
+        .revoke_access(&fixture.passport_id, &revoked_id);
+
+    // access_id 3: approved, then left to expire.
+    fixture.create_and_approve_request(
+        &Address::generate(&fixture.env),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    fixture
+        .env
+        .ledger()
+        .set_timestamp(REQUESTED_AT + ONE_DAY + 1);
+
+    // access_id 4: approved after the time advance, still active.
+    let active_provider = Address::generate(&fixture.env);
+    let active_id = fixture.create_and_approve_request(
+        &active_provider,
+        RecordScope::PrescriptionsOnly,
+        ONE_DAY,
+    );
+
+    let active = fixture
+        .client()
+        .get_active_permissions(&fixture.passport_id);
+
+    assert_eq!(active.len(), 1);
+    assert_eq!(active.get(0).unwrap().access_id, active_id);
+    assert_eq!(active.get(0).unwrap().provider_id, active_provider);
+}
+
+#[test]
+fn get_active_permissions_returns_multiple_active_grants_in_creation_order() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let first_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+    let second_id = fixture.create_and_approve_request(
+        &Address::generate(&fixture.env),
+        RecordScope::PrescriptionsOnly,
+        7 * ONE_DAY,
+    );
+
+    let active = fixture
+        .client()
+        .get_active_permissions(&fixture.passport_id);
+
+    assert_eq!(active.len(), 2);
+    assert_eq!(active.get(0).unwrap().access_id, first_id);
+    assert_eq!(active.get(1).unwrap().access_id, second_id);
+}
+
+// --- lazy expiry boundary (shared is_active helper) ---
+
+#[test]
+fn check_access_flips_from_active_to_expired_at_the_ledger_boundary() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    fixture
+        .env
+        .ledger()
+        .set_timestamp(REQUESTED_AT + ONE_DAY - 1);
+    assert!(
+        fixture.client().check_access(
+            &fixture.passport_id,
+            &fixture.provider_id,
+            &RecordScope::LabResultsOnly,
+        ),
+        "must still be active the instant before expires_at"
+    );
+
+    fixture.env.ledger().set_timestamp(REQUESTED_AT + ONE_DAY);
+    assert!(
+        !fixture.client().check_access(
+            &fixture.passport_id,
+            &fixture.provider_id,
+            &RecordScope::LabResultsOnly,
+        ),
+        "must be expired once now reaches expires_at"
+    );
+}
+
+// --- events ---
+
+#[test]
+fn request_access_publishes_an_access_requested_event() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+
+    let expected = AccessRequested {
+        access_id,
+        passport_id: fixture.passport_id.clone(),
+        provider_id: fixture.provider_id.clone(),
+        record_scope: RecordScope::LabResultsOnly,
+    };
+
+    assert_eq!(
+        fixture.env.events().all(),
+        [expected.to_xdr(&fixture.env, &fixture.contract_id)]
+    );
+}
+
+#[test]
+fn request_access_does_not_publish_an_event_when_it_fails() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let result = fixture.client().try_request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::AllRecords,
+        &0,
+    );
+
+    assert_eq!(result, Err(Ok(Error::InvalidDuration)));
+    assert!(fixture.env.events().all().events().is_empty());
+}
+
+#[test]
+fn approve_access_publishes_an_access_approved_event() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .approve_access(&fixture.passport_id, &access_id);
+
+    let expected = AccessApproved {
+        access_id,
+        passport_id: fixture.passport_id.clone(),
+        provider_id: fixture.provider_id.clone(),
+    };
+
+    assert_eq!(
+        fixture.env.events().all(),
+        [expected.to_xdr(&fixture.env, &fixture.contract_id)]
+    );
+}
+
+#[test]
+fn approve_access_does_not_publish_an_event_when_it_fails() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let result = fixture
+        .client()
+        .try_approve_access(&fixture.passport_id, &42);
+
+    assert_eq!(result, Err(Ok(Error::RequestNotFound)));
+    assert!(fixture.env.events().all().events().is_empty());
+}
+
+#[test]
+fn reject_access_publishes_an_access_rejected_event() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.client().request_access(
+        &fixture.provider_id,
+        &fixture.passport_id,
+        &RecordScope::LabResultsOnly,
+        &ONE_DAY,
+    );
+    fixture
+        .client()
+        .reject_access(&fixture.passport_id, &access_id);
+
+    let expected = AccessRejected {
+        access_id,
+        passport_id: fixture.passport_id.clone(),
+        provider_id: fixture.provider_id.clone(),
+    };
+
+    assert_eq!(
+        fixture.env.events().all(),
+        [expected.to_xdr(&fixture.env, &fixture.contract_id)]
+    );
+}
+
+#[test]
+fn reject_access_does_not_publish_an_event_when_it_fails() {
+    let fixture = Fixture::new();
+    fixture.env.mock_all_auths();
+
+    let access_id = fixture.create_and_approve_request(
+        &fixture.provider_id.clone(),
+        RecordScope::LabResultsOnly,
+        ONE_DAY,
+    );
+
+    let result = fixture
+        .client()
+        .try_reject_access(&fixture.passport_id, &access_id);
+
+    assert_eq!(result, Err(Ok(Error::AlreadyApproved)));
+    assert!(fixture.env.events().all().events().is_empty());
 }
