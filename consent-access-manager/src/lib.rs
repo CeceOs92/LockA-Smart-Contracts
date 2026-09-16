@@ -1,12 +1,14 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
 mod error;
+mod events;
 mod storage;
 mod types;
 
 pub use error::Error;
+pub use events::{AccessApproved, AccessRejected, AccessRequested};
 pub use storage::AccessRequest;
 pub use types::RecordScope;
 
@@ -39,21 +41,27 @@ impl ConsentAccessManager {
         }
 
         let access_id = storage::next_access_id(&env);
-        storage::write_access_request(
-            &env,
-            &AccessRequest {
-                access_id,
-                passport_id,
-                provider_id,
-                record_scope,
-                duration_seconds,
-                approved: false,
-                expires_at: 0,
-                revoked: false,
-                rejected: false,
-                created_at: env.ledger().timestamp(),
-            },
-        );
+        let request = AccessRequest {
+            access_id,
+            passport_id,
+            provider_id,
+            record_scope,
+            duration_seconds,
+            approved: false,
+            expires_at: 0,
+            revoked: false,
+            rejected: false,
+            created_at: env.ledger().timestamp(),
+        };
+        storage::write_access_request(&env, &request);
+
+        AccessRequested {
+            access_id: request.access_id,
+            passport_id: request.passport_id,
+            provider_id: request.provider_id,
+            record_scope: request.record_scope,
+        }
+        .publish(&env);
 
         Ok(access_id)
     }
@@ -92,6 +100,13 @@ impl ConsentAccessManager {
         request.expires_at = env.ledger().timestamp() + request.duration_seconds;
         storage::write_access_request(&env, &request);
 
+        AccessApproved {
+            access_id: request.access_id,
+            passport_id: request.passport_id,
+            provider_id: request.provider_id,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
@@ -128,6 +143,13 @@ impl ConsentAccessManager {
 
         request.rejected = true;
         storage::write_access_request(&env, &request);
+
+        AccessRejected {
+            access_id: request.access_id,
+            passport_id: request.passport_id,
+            provider_id: request.provider_id,
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -185,9 +207,7 @@ impl ConsentAccessManager {
                 || request.record_scope == RecordScope::AllRecords;
 
             if request.provider_id == provider_id
-                && request.approved
-                && !request.revoked
-                && request.expires_at > now
+                && storage::is_active(&request, now)
                 && scope_matches
             {
                 return true;
@@ -195,6 +215,40 @@ impl ConsentAccessManager {
         }
 
         false
+    }
+
+    /// Returns every currently active grant for `passport_id`: `approved`,
+    /// not `revoked`, and not yet expired, per the same shared `is_active`
+    /// definition also used by [`Self::check_access`].
+    ///
+    /// Results are ordered by ascending `access_id`, i.e. the order the
+    /// underlying requests were created in (the order [`Self::request_access`]
+    /// appended them to the patient's index).
+    ///
+    /// Read-only: no authorization is required, since the result only
+    /// contains state already scoped to `passport_id`.
+    ///
+    /// This walks every `access_id` ever recorded for the passport and
+    /// returns every active match in one call, with no cap or pagination.
+    /// That is acceptable for the request volumes this contract expects
+    /// (a patient's provider grants), but a passport with an unusually large
+    /// request history could make this call read and return an unbounded
+    /// number of ledger entries. If that becomes a real constraint, switch
+    /// to a paginated interface (e.g. a `starting_after: Option<u64>` plus
+    /// `limit: u32`) rather than returning everything.
+    pub fn get_active_permissions(env: Env, passport_id: Address) -> Vec<AccessRequest> {
+        let now = env.ledger().timestamp();
+        let mut active = Vec::new(&env);
+
+        for access_id in storage::read_patient_index(&env, &passport_id) {
+            if let Some(request) = storage::read_access_request(&env, access_id) {
+                if storage::is_active(&request, now) {
+                    active.push_back(request);
+                }
+            }
+        }
+
+        active
     }
 }
 

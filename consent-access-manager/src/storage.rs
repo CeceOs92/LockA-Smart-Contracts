@@ -103,10 +103,24 @@ pub(crate) fn read_access_request(env: &Env, access_id: u64) -> Option<AccessReq
     request
 }
 
+/// Returns whether `request` currently grants access: `approved`, not
+/// `revoked`, and not yet expired as of `now`.
+///
+/// This is the single shared definition of "active" used by every read path
+/// in the crate ([`crate::ConsentAccessManager::check_access`] and
+/// [`crate::ConsentAccessManager::get_active_permissions`]), so expiry can't
+/// drift out of sync between them. It does not consider `record_scope`:
+/// callers that need scope matching check that separately. `now` should
+/// always come from `env.ledger().timestamp()`, the crate's single source of
+/// truth for the current time.
+pub(crate) fn is_active(request: &AccessRequest, now: u64) -> bool {
+    request.approved && !request.revoked && request.expires_at > now
+}
+
 /// Returns every `access_id` ever recorded for `passport_id`, in the order
 /// the requests were created. Includes rejected, revoked, and expired
 /// requests; callers that need only currently-valid grants must filter the
-/// loaded [`AccessRequest`] values themselves.
+/// loaded [`AccessRequest`] values themselves (see [`is_active`]).
 pub(crate) fn read_patient_index(env: &Env, passport_id: &Address) -> Vec<u64> {
     let index_key = DataKey::PatientIndex(passport_id.clone());
     let storage = env.storage().persistent();
@@ -174,5 +188,42 @@ mod test {
             assert_eq!(next_access_id(&env), 2);
             assert_eq!(next_access_id(&env), 3);
         });
+    }
+
+    #[test]
+    fn is_active_flips_from_active_to_expired_at_the_boundary() {
+        let env = Env::default();
+        let mut request = sample_request(&env, 1);
+        request.approved = true;
+        request.expires_at = 1_000;
+
+        assert!(
+            is_active(&request, 999),
+            "must still be active the instant before expires_at"
+        );
+        assert!(
+            !is_active(&request, 1_000),
+            "must be expired once now reaches expires_at"
+        );
+    }
+
+    #[test]
+    fn is_active_requires_approval() {
+        let env = Env::default();
+        let mut request = sample_request(&env, 1);
+        request.expires_at = 1_000;
+
+        assert!(!is_active(&request, 500));
+    }
+
+    #[test]
+    fn is_active_excludes_revoked_requests() {
+        let env = Env::default();
+        let mut request = sample_request(&env, 1);
+        request.approved = true;
+        request.revoked = true;
+        request.expires_at = 1_000;
+
+        assert!(!is_active(&request, 500));
     }
 }
