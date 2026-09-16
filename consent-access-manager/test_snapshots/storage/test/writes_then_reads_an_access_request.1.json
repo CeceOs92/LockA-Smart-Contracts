@@ -108,6 +108,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "rejected"
+                    },
+                    "val": {
+                      "bool": false
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "revoked"
                     },
                     "val": {
