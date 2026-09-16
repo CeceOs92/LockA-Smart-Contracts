@@ -11,4 +11,19 @@ pub enum Error {
     /// for a non-zero number of seconds, otherwise it would expire the moment
     /// the patient approved it.
     InvalidDuration = 1,
+    /// No [`AccessRequest`](crate::AccessRequest) is stored under the given
+    /// `access_id`.
+    RequestNotFound = 2,
+    /// The `access_id` exists, but its `passport_id` does not match the
+    /// caller, so the caller has no right to act on it.
+    NotOwner = 3,
+    /// The request has already been revoked, so it can no longer be approved
+    /// or rejected.
+    AlreadyRevoked = 4,
+    /// The request has already been approved, so it can no longer be
+    /// rejected.
+    AlreadyApproved = 5,
+    /// The request has already been rejected, so it can no longer be
+    /// approved or rejected again.
+    AlreadyRejected = 6,
 }

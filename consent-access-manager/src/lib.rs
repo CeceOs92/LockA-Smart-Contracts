@@ -50,11 +50,151 @@ impl ConsentAccessManager {
                 approved: false,
                 expires_at: 0,
                 revoked: false,
+                rejected: false,
                 created_at: env.ledger().timestamp(),
             },
         );
 
         Ok(access_id)
+    }
+
+    /// Approves a pending access request, activating it for the duration the
+    /// provider requested.
+    ///
+    /// `duration_seconds` is carried from the original [`Self::request_access`]
+    /// call rather than accepted again here, so a patient cannot be tricked
+    /// into granting a longer window than the one they were shown when the
+    /// request was made. `expires_at` is set to `env.ledger().timestamp() +
+    /// duration_seconds` at approval time.
+    ///
+    /// Only `passport_id` can approve its own requests. Fails with
+    /// [`Error::RequestNotFound`] if `access_id` does not exist, with
+    /// [`Error::NotOwner`] if it belongs to a different passport, with
+    /// [`Error::AlreadyRevoked`] if it was revoked, or with
+    /// [`Error::AlreadyRejected`] if it was rejected. Approving an
+    /// already-approved request is allowed and refreshes `expires_at`.
+    pub fn approve_access(env: Env, passport_id: Address, access_id: u64) -> Result<(), Error> {
+        passport_id.require_auth();
+
+        let mut request =
+            storage::read_access_request(&env, access_id).ok_or(Error::RequestNotFound)?;
+        if request.passport_id != passport_id {
+            return Err(Error::NotOwner);
+        }
+        if request.revoked {
+            return Err(Error::AlreadyRevoked);
+        }
+        if request.rejected {
+            return Err(Error::AlreadyRejected);
+        }
+
+        request.approved = true;
+        request.expires_at = env.ledger().timestamp() + request.duration_seconds;
+        storage::write_access_request(&env, &request);
+
+        Ok(())
+    }
+
+    /// Rejects a pending access request instead of approving it.
+    ///
+    /// Rejection is recorded on the request itself via the `rejected` field
+    /// (see the doc comment on [`AccessRequest`]) rather than by removing it
+    /// from the patient's request index, so the index remains a full consent
+    /// trail.
+    ///
+    /// Only `passport_id` can reject its own requests. Fails with
+    /// [`Error::RequestNotFound`] if `access_id` does not exist, with
+    /// [`Error::NotOwner`] if it belongs to a different passport, with
+    /// [`Error::AlreadyApproved`] if it was already approved, or with
+    /// [`Error::AlreadyRevoked`] / [`Error::AlreadyRejected`] if it was
+    /// already revoked or rejected.
+    pub fn reject_access(env: Env, passport_id: Address, access_id: u64) -> Result<(), Error> {
+        passport_id.require_auth();
+
+        let mut request =
+            storage::read_access_request(&env, access_id).ok_or(Error::RequestNotFound)?;
+        if request.passport_id != passport_id {
+            return Err(Error::NotOwner);
+        }
+        if request.approved {
+            return Err(Error::AlreadyApproved);
+        }
+        if request.revoked {
+            return Err(Error::AlreadyRevoked);
+        }
+        if request.rejected {
+            return Err(Error::AlreadyRejected);
+        }
+
+        request.rejected = true;
+        storage::write_access_request(&env, &request);
+
+        Ok(())
+    }
+
+    /// Revokes an access grant, immediately invalidating it regardless of
+    /// its current `approved` or `expires_at` state.
+    ///
+    /// Like rejection, revocation is recorded via the `revoked` field on the
+    /// request itself (see the doc comment on [`AccessRequest`]); the entry
+    /// stays in the patient's request index. Revoking an already-revoked
+    /// request is idempotent and succeeds without error, so callers don't
+    /// need to check current state before revoking.
+    ///
+    /// Only `passport_id` can revoke its own requests. Fails with
+    /// [`Error::RequestNotFound`] if `access_id` does not exist, or with
+    /// [`Error::NotOwner`] if it belongs to a different passport.
+    pub fn revoke_access(env: Env, passport_id: Address, access_id: u64) -> Result<(), Error> {
+        passport_id.require_auth();
+
+        let mut request =
+            storage::read_access_request(&env, access_id).ok_or(Error::RequestNotFound)?;
+        if request.passport_id != passport_id {
+            return Err(Error::NotOwner);
+        }
+
+        request.revoked = true;
+        storage::write_access_request(&env, &request);
+
+        Ok(())
+    }
+
+    /// Returns whether `provider_id` currently has valid access to
+    /// `passport_id`'s records under `record_scope`.
+    ///
+    /// Access is valid when a matching request exists with `approved ==
+    /// true`, `revoked == false`, `expires_at > env.ledger().timestamp()`,
+    /// and either its `record_scope` matches the query or the stored scope is
+    /// `RecordScope::AllRecords`. Read-only: no authorization is required, so
+    /// any caller (e.g. the `medical-record-registry` contract) can invoke
+    /// it. Returns `false`, rather than panicking, when no request matches.
+    pub fn check_access(
+        env: Env,
+        passport_id: Address,
+        provider_id: Address,
+        record_scope: RecordScope,
+    ) -> bool {
+        let now = env.ledger().timestamp();
+
+        for access_id in storage::read_patient_index(&env, &passport_id) {
+            let Some(request) = storage::read_access_request(&env, access_id) else {
+                continue;
+            };
+
+            let scope_matches = request.record_scope == record_scope
+                || request.record_scope == RecordScope::AllRecords;
+
+            if request.provider_id == provider_id
+                && request.approved
+                && !request.revoked
+                && request.expires_at > now
+                && scope_matches
+            {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
